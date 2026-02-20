@@ -505,6 +505,48 @@ let driverRequestInterval = null;
 // ──────────────────────────────────────────────
 // MAP SETUP
 // ──────────────────────────────────────────────
+
+async function getPlaceName(lat, lng) {
+    const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+    );
+    const data = await res.json();
+
+    if (data.address) {
+        const a = data.address;
+        return (a.suburb || a.village || a.town || a.city || "Selected")
+            + ", " +
+            (a.state || "");
+    }
+
+    return "Selected";
+}
+
+
+
+async function updatePlaceName(lat, lng) {
+    try {
+        const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+        );
+        const data = await res.json();
+
+        const badge = document.querySelector('#map-area > div:nth-child(2) span:last-child');
+
+        if (badge && data.address) {
+            const address = data.address;
+
+            badge.textContent =
+                (address.suburb || address.village || address.town || address.city || "Unknown area")
+                + ", " +
+                (address.state || "");
+        }
+    } catch (err) {
+        console.log("Location name error:", err);
+    }
+}
+
+
 const map = L.map('map', { center: DHAKA_CENTER, zoom: 13, zoomControl: true });
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
@@ -520,8 +562,8 @@ window.addEventListener('load', () => {
         const { latitude: lat, longitude: lng } = pos.coords;
         map.setView([lat, lng], 15);
         // Update location badge
-        const badge = document.querySelector('#map-area > div:nth-child(2) span:last-child');
-        if (badge) badge.textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      
+        updatePlaceName(lat, lng);
         // Auto-set pickup to user's real location
         setPickup({ lat, lng }, 'My Location');
         updateMapLayers(); render();
@@ -674,8 +716,66 @@ function hideHint() { document.getElementById('map-hint').style.display='none'; 
 // ──────────────────────────────────────────────
 // LOCATION HELPERS
 // ──────────────────────────────────────────────
-function setPickup(latlng,name) { pickup=latlng; pickupName=name; }
-function setDropoff(latlng,name) { dropoff=latlng; dropoffName=name; }
+//function setPickup(latlng,name) { pickup=latlng; pickupName=name; }
+//function setDropoff(latlng,name) { dropoff=latlng; dropoffName=name; }
+async function updatePickupPlaceName(lat, lng) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+    );
+    const data = await res.json();
+
+    if (data.address) {
+      const a = data.address;
+      pickupName =
+        (a.suburb || a.village || a.town || a.city || "Selected")
+        + ", " +
+        (a.state || "");
+
+      updateMapLayers();   // 🔥 re-render map safely
+    }
+  } catch (err) {
+    console.log("Pickup name error:", err);
+  }
+}
+
+async function updateDropoffPlaceName(lat, lng) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+    );
+    const data = await res.json();
+
+    if (data.address) {
+      const a = data.address;
+      dropoffName =
+        (a.suburb || a.village || a.town || a.city || "Selected")
+        + ", " +
+        (a.state || "");
+
+      updateMapLayers();
+    }
+  } catch (err) {
+    console.log("Dropoff name error:", err);
+  }
+}
+
+function setPickup(latlng, name) {
+  pickup = latlng;
+  pickupName = name;
+  if (name.includes(',')) {  // meaning it's lat,lng
+    updatePickupPlaceName(latlng.lat, latlng.lng);
+  }
+}
+
+function setDropoff(latlng, name) {
+  dropoff = latlng;
+  dropoffName = name;
+
+  if (name.includes(',')) {
+    updateDropoffPlaceName(latlng.lat, latlng.lng);
+  }
+}
 
 function estFare() {
   if (!pickup||!dropoff) return 0;
@@ -719,6 +819,8 @@ function filterPickup(val) {
 function handlePickupKey(e) {
   if (e.key === 'Enter') { e.preventDefault(); submitPickupText(); }
 }
+
+
 function submitPickupText() {
   const val = document.getElementById('pickup-search-input').value.trim();
   if (!val) return;
